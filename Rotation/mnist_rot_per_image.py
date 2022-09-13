@@ -10,7 +10,7 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
-# MULVAR MEANS EACH IMAGE IN THE FAKE DISTRIBUTION HAS ITS OWN ROTATION VARIABLE
+# All images in the dataset have different rotation variables
 
 def plot_image_grid(images, ncols=None, cmap="gray"):
     if not ncols:

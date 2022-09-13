@@ -10,7 +10,7 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
-# ONEVAR MEANS EACH BATCH IN THE FAKE DISTRIBUTION SHARES ROTATION VARIABLES
+# Every image in the dataset shares the same rotation variable
 
 def plot_image_grid(images, ncols=None, cmap='gray'):
     if not ncols:
