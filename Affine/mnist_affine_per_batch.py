@@ -10,7 +10,7 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
-# Every batch in the dataset shares the same rotation variable
+# Every batch in the dataset shares the same affine transformation variable
 
 def plot_image_grid(images, ncols=None, cmap="gray"):
     if not ncols:
