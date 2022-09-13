@@ -80,8 +80,8 @@ class Generator(nn.Module):
     def forward(self,idx):
         for i, (batch, _) in enumerate(fake_loader,idx):
             rot = torch.stack([torch.stack([
-                torch.stack([torch.cos(self.rot[5*i+j]) / self.scale[5*i+j], -torch.sin(self.rot[5*i+j]) / self.scale[5*i+j], self.trans[5*i+j][0] / self.scale[5*i+j]]),
-                torch.stack([torch.sin(self.rot[5*i+j]) / self.scale[5*i+j], torch.cos(self.rot[5*i+j]) / self.scale[5*i+j], self.trans[5*i+j][1] / self.scale[5*i+j]])
+                torch.stack([torch.cos(self.rot[batch_size*i+j]) / self.scale[batch_size*i+j], -torch.sin(self.rot[batch_size*i+j]) / self.scale[batch_size*i+j], self.trans[batch_size*i+j][0] / self.scale[batch_size*i+j]]),
+                torch.stack([torch.sin(self.rot[batch_size*i+j]) / self.scale[batch_size*i+j], torch.cos(self.rot[batch_size*i+j]) / self.scale[batch_size*i+j], self.trans[batch_size*i+j][1] / self.scale[batch_size*i+j]])
                 ]) for j in range(batch_size)])
             grid = F.affine_grid(rot, batch.size(), align_corners=False)
             batch = F.grid_sample(batch, grid, align_corners=False)
