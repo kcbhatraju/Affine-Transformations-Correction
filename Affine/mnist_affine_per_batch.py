@@ -52,9 +52,9 @@ lrd = 0.0001
 dataset = list(datasets.MNIST(root="MNIST_data/", transform=transform, download=True))
 for i in range(len(dataset)):
     img = dataset[i][0].unsqueeze(dim=0)
-    r = torch.tensor(2.)
+    r = torch.tensor(3.)
     t = torch.tensor([0.5, 0.5])
-    sc = torch.tensor(1.)
+    sc = torch.tensor(1.25)
     rot = torch.stack([torch.stack([
         torch.stack([torch.cos(r) / sc, -torch.sin(r) / sc, torch.tensor(t[0]) / sc]),
         torch.stack([torch.sin(r) / sc, torch.cos(r) / sc, torch.tensor(t[1]) / sc])
