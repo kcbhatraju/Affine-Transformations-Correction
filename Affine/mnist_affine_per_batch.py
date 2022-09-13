@@ -1,4 +1,4 @@
-import torch, torchviz
+import torch
 from torch import nn, optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms
@@ -18,7 +18,7 @@ def plot_image_grid(images, ncols=None, cmap="gray"):
         ncols = factors[len(factors) // 2] if len(factors) else len(images) // 4 + 1
     nrows = int(len(images) / ncols) + int(len(images) % ncols)
     imgs = [images[i] if len(images) > i else None for i in range(nrows * ncols)]
-    f, axes = plt.subplots(nrows, ncols, figsize=(3*ncols, 2*nrows))
+    _, axes = plt.subplots(nrows, ncols, figsize=(3*ncols, 2*nrows))
     axes = axes.flatten()[:len(imgs)]
     for img, ax in zip(imgs, axes.flatten()): 
         if np.any(img):
@@ -43,25 +43,24 @@ transform = transforms.Compose([
 
 PI = torch.tensor(3.14159265358979323)
 batch_size = 32
-num_epochs = 50
+num_epochs = 151
 lrr = 0.1
 lrt = 0.01
 lrsc = 0.01
-lrd = 1e-4
+lrd = 0.0001
 
 dataset = list(datasets.MNIST(root="MNIST_data/", transform=transform, download=True))
 for i in range(len(dataset)):
     img = dataset[i][0].unsqueeze(dim=0)
-    r = torch.tensor(1.)
-    t = torch.tensor([0.25, 0.25])
-    sc = torch.tensor(1.25)
-    rot = torch.stack([
-        torch.stack([torch.cos(r) / sc, -torch.sin(r) / sc, torch.tensor(t[0])]),
-        torch.stack([torch.sin(r) / sc, torch.cos(r) / sc, torch.tensor(t[1])])
-    ])
-    rot_mat = rot[None, ...].repeat(img.shape[0],1,1)
-    grid = F.affine_grid(rot_mat, img.size())
-    img = F.grid_sample(img, grid)
+    r = torch.tensor(2.)
+    t = torch.tensor([0.5, 0.5])
+    sc = torch.tensor(1.)
+    rot = torch.stack([torch.stack([
+        torch.stack([torch.cos(r) / sc, -torch.sin(r) / sc, torch.tensor(t[0]) / sc]),
+        torch.stack([torch.sin(r) / sc, torch.cos(r) / sc, torch.tensor(t[1]) / sc])
+        ])])
+    grid = F.affine_grid(rot, img.size(), align_corners=False)
+    img = F.grid_sample(img, grid, align_corners=False)
     dataset[i] = (img, dataset[i][1])  
 loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -80,22 +79,14 @@ class Generator(nn.Module):
     
     def forward(self,idx):
         for _, (batch, _) in enumerate(fake_loader,idx):
-            full = None
-            for i, img in enumerate(batch):
-                img = img.unsqueeze(dim=0)
-                rot = torch.stack([
-                    torch.stack([torch.cos(self.rot[i]) / self.scale[i], -torch.sin(self.rot[i]) / self.scale[i], self.trans[i][0]]),
-                    torch.stack([torch.sin(self.rot[i]) / self.scale[i], torch.cos(self.rot[i]) / self.scale[i], self.trans[i][1]])
-                    ])
-                rot_mat = rot[None, ...].repeat(img.shape[0],1,1)
-                grid = F.affine_grid(rot_mat, img.size())
-                img = F.grid_sample(img, grid)
+            rot = torch.stack([torch.stack([
+                torch.stack([torch.cos(self.rot[i]) / self.scale[i], -torch.sin(self.rot[i]) / self.scale[i], self.trans[i][0] / self.scale[i]]),
+                torch.stack([torch.sin(self.rot[i]) / self.scale[i], torch.cos(self.rot[i]) / self.scale[i], self.trans[i][1] / self.scale[i]])
+                ]) for i in range(batch_size)])
+            grid = F.affine_grid(rot, batch.size(), align_corners=False)
+            batch = F.grid_sample(batch, grid, align_corners=False)
 
-                if full is None: full = img
-                else: full = torch.cat((full,img))
-                # torchviz.make_dot(full).render("zimgtest2",format="png")
-            
-            return full
+            return batch
 
 
 class Discriminator(nn.Module):
@@ -103,8 +94,8 @@ class Discriminator(nn.Module):
         super().__init__()
         
         self.net = nn.Sequential(
-            nn.Conv2d(1,3,kernel_size=3),
-            nn.Conv2d(3,1,kernel_size=2),
+            nn.Conv2d(1,4,kernel_size=3),
+            nn.Conv2d(4,1,kernel_size=2),
             nn.Flatten(),
             nn.Linear(25*25,1),
             nn.Sigmoid()
@@ -117,11 +108,10 @@ gen = Generator()
 disc = Discriminator()
 criterion = nn.BCELoss()
 
-opt_rot = optim.Adam([gen.rot], lr=lrr)
-opt_trans = optim.Adam([gen.trans], lr=lrt)
-opt_scale = optim.Adam([gen.scale], lr=lrsc)
-
-opt_disc = optim.Adam(disc.parameters(), lr=lrd)
+opt_rot = optim.AdamW([gen.rot], lr=lrr, amsgrad=True, weight_decay=0.001)
+opt_trans = optim.AdamW([gen.trans], lr=lrt, amsgrad=True, weight_decay=0.001)
+opt_scale = optim.AdamW([gen.scale], lr=lrsc, amsgrad=True, weight_decay=0.001)
+opt_disc = optim.AdamW(disc.parameters(), lr=lrd, amsgrad=True, weight_decay=0.001)
 
 with torch.no_grad():
     plot_image_grid(next(iter(loader))[0].reshape(-1, 28, 28, 1).numpy())
@@ -143,7 +133,6 @@ for epoch in range(num_epochs):
         lossD_fake = criterion(disc_fake, torch.zeros_like(disc_fake))
         lossD = lossD_real + lossD_fake
         lossD.backward(retain_graph=True)
-        # print("1",gen.rot.grad)
         opt_disc.step()
         
         # Train Generator min log(1-D(G(z))) <--> max log(D(G(z)))
@@ -153,22 +142,21 @@ for epoch in range(num_epochs):
         
         output = disc(fake).view(-1)
         lossG = criterion(output, torch.ones_like(output))  
-        # torchviz.make_dot(lossG).render("zimgtest3",format="png")
         lossG.backward()
-        # print("2",gen.rot.grad)
+        
         opt_rot.step()
         opt_trans.step()
         opt_scale.step()
-        # with torch.no_grad(): gen.rot -= lrg * gen.rot.data
+        
         with torch.no_grad():
             progress(batch_idx+1,len(loader),
-                     gen_loss=round(float(lossG.mean().numpy()),2),
-                     discrim_loss=round(float(lossD.mean().numpy()),2),
+                     g=round(float(lossG.mean().numpy()),2),
+                     d=round(float(lossD.mean().numpy()),2),
                      r=round(float(gen.rot.median().numpy()),2),
                      t=round(float(gen.trans.median().numpy()),2),
                      sc=round(float(gen.scale.median().numpy()),2))
 
-    if epoch % 5 == 0:
+    if epoch % 25 == 0:
         with torch.no_grad():
             fake = gen(fixed_noise).reshape(-1, 28, 28, 1)
             plot_image_grid(fake.detach().numpy())
